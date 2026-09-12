@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mr. B - Split Sphere AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #030603; /* Deep black/green background */
+            color: #FFFFFF;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        h1 {
+            font-size: 2rem;
+            letter-spacing: 3px;
+            color: #00FF88;
+            text-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
+            margin-bottom: 5px;
+        }
+
+        p.status {
+            color: #8A99AD;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+        }
+
+        .visualizer-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .btn-start {
+            margin-top: 30px;
+            padding: 12px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: #030603;
+            background: linear-gradient(135deg, #00FF88, #00B861);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .btn-start:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Mr. B</h1>
+    <p class="status" id="statusText">System Standby: Awaiting Audio Input</p>
+
+    <!-- Visualizer Canvas Container -->
+    <div class="visualizer-container">
+        <canvas id="orbCanvas" width="500" height="500"></canvas>
+    </div>
+
+    <!-- Activation Button -->
+    <button class="btn-start" id="startBtn">ACTIVATE MIC</button>
+
+    <script>
+        const canvas = document.getElementById('orbCanvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const statusText = document.getElementById('statusText');
+
+        let audioCtx;
+        let analyser;
+        let microphone;
+        let dataArray;
+        let isListening = false;
+        let idlePulse = 0;
+
+        // Base Configuration
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const baseRadius = 85; // Size of the core sphere
+
+        function drawSplitSphere() {
+            requestAnimationFrame(drawSplitSphere);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Fetch live audio data
+            if (isListening && dataArray) {
+                analyser.getByteFrequencyData(dataArray);
+            }
+
+            idlePulse += 0.02;
+            const ambientGlow = Math.sin(idlePulse) * 5;
+
+            // ==========================================
+            // 1. LEFT HALF: The Solid Glowing Hemisphere
+            // ==========================================
+            
+            // Draw a subtle outer glow behind the left hemisphere
+            const leftGlow = ctx.createRadialGradient(
+                centerX, centerY, baseRadius * 0.5, 
+                centerX, centerY, baseRadius * 1.5
+            );
+            leftGlow.addColorStop(0, 'rgba(0, 255, 136, 0.4)');
+            leftGlow.addColorStop(1, 'rgba(0, 255, 136, 0)');
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, baseRadius * 1.5 + ambientGlow, Math.PI / 2, Math.PI * 1.5, false);
+            ctx.fillStyle = leftGlow;
+            ctx.fill();
+
+            // Draw the solid green left hemisphere
+            const solidGradient = ctx.createLinearGradient(centerX - baseRadius, centerY, centerX, centerY);
+            solidGradient.addColorStop(0, '#00FF88');
+            solidGradient.addColorStop(0.8, '#00C86A');
+            solidGradient.addColorStop(1, '#003B1F'); // Shadow near the center split
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, baseRadius, Math.PI / 2, Math.PI * 1.5, false);
+            ctx.fillStyle = solidGradient;
+            ctx.fill();
+
+            // ==========================================
+            // 2. RIGHT HALF: Audio-Reactive Radial Spikes
+            // ==========================================
+            
+            // Draw the dark background inside the right hemisphere to create the split illusion
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, baseRadius, -Math.PI / 2, Math.PI / 2, false);
+            ctx.fillStyle = '#030603'; // Match body background
+            ctx.fill();
+
+            // Draw the right-side center seam glow
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - baseRadius);
+            ctx.lineTo(centerX, centerY + baseRadius);
+            ctx.strokeStyle = '#00FF88';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00FF88';
+            ctx.stroke();
+            ctx.shadowBlur = 0; // Reset shadow
+
+            // Draw the radial fiber-optic spikes
+            const spikeCount = 90; // Number of spikes shooting out
+            
+            for (let i = 0; i <= spikeCount; i++) {
+                // Map the spikes evenly from the top ( -90 degrees ) to the bottom ( +90 degrees )
+                const angle = -Math.PI / 2 + (i / spikeCount) * Math.PI;
+                
+                let spikeLength = 10 + ambientGlow; // Default length when quiet
+                let audioIntensity = 0;
+
+                if (isListening && dataArray) {
+                    // Map the line index to a frequency bucket
+                    // Focus on the lower/mid frequencies for voice responsiveness
+                    const freqIndex = Math.floor((i / spikeCount) * (dataArray.length / 2));
+                    audioIntensity = dataArray[freqIndex] || 0;
+                    
+                    // Multiply by how loud they are speaking to extend the spikes
+                    spikeLength += (audioIntensity / 255) * 130; 
+                }
+
+                // Coordinates for the start of the line (surface of the sphere)
+                const startX = centerX + Math.cos(angle) * baseRadius;
+                const startY = centerY + Math.sin(angle) * baseRadius;
+
+                // Coordinates for the end of the line (tip of the spike)
+                const endX = centerX + Math.cos(angle) * (baseRadius + spikeLength);
+                const endY = centerY + Math.sin(angle) * (baseRadius + spikeLength);
+
+                // Draw the connecting line
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.strokeStyle = `rgba(0, 255, 136, ${0.15 + (audioIntensity / 255)})`;
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+
+                // Draw the glowing particle tip at the end of the line
+                ctx.beginPath();
+                ctx.arc(endX, endY, 1.5, 0, Math.PI * 2);
+                ctx.fillStyle = audioIntensity > 150 ? '#FFFFFF' : '#00FF88'; // Turns white if loud
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#00FF88';
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset shadow
+            }
+        }
+
+        // Initialize Microphone Stream
+        async function startListening() {
+            try {
+                const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                recognition.onresult = async (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    statusText.innerText = `You said: "${transcript}"`;
+                    
+                    // Send text to your FastAPI Cloud Backend
+                    const res = await fetch("http://localhost:8000/api/speak", { // Update this URL later
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({text: transcript})
+                    });
+                    
+                    const data = await res.json();
+                    
+                    // Mr. B Speaks Back
+                    const utterance = new SpeechSynthesisUtterance(data.reply);
+                    window.speechSynthesis.speak(utterance);
+                    statusText.innerText = "Mr. B is responding...";
+                };
+                
+                // Trigger recognition when the visualizer starts
+                recognition.start();
+            } catch (err) {
+                alert("Microphone permission denied. Cannot activate visualizer.");
+                console.error(err);
+            }
+        }
+
+        startBtn.addEventListener('click', startListening);
+
+        // Start animation loop
+        drawSplitSphere();
+    </script>
+</body>
+</html>
